@@ -13,7 +13,7 @@ hy = hy.astype(numpy.float64)
 kc = ke//2
 t0 = 40
 spread = 12
-nsteps = 1000
+nsteps = 2000
 
 kc = numpy.int32(kc)
 t0 = numpy.int32(t0)
@@ -35,11 +35,12 @@ mod = SourceModule("""
     #include <math.h>
   __global__ void fdtd_e(double *ex, double *hy, int kc, int t0, int spread, int step)
   {
-    int idx = threadIdx.x + threadIdx.y*32;
+    int idx = (blockDim.x*blockIdx.x + threadIdx.x);
+    //printf("%d ",gridDim.x);
     double pulse;
     if (idx > 0 && idx < 2*kc){
         ex[idx] = ex[idx] + 0.5* (hy[idx - 1] - hy[idx]);
-        if (idx == kc){ 
+        if (idx == kc){
                 pulse = (double)exp((double)-0.5 * pow((double)(t0 - step)/(double)spread, 2));
                 ex[kc] = pulse;
         }
@@ -48,7 +49,7 @@ mod = SourceModule("""
   
   __global__ void fdtd_h(double *ex, double *hy, int kc, int t0, int spread, int step)
   {
-    int idx = threadIdx.x + threadIdx.y*32;
+    int idx = (blockDim.x*blockIdx.x + threadIdx.x);
     if (idx < 2*kc-1)
         hy[idx] = hy[idx] + 0.5 * (ex[idx] - ex[idx + 1]);
   }
@@ -59,7 +60,7 @@ func_h = mod.get_function("fdtd_h")
 ex_get = numpy.empty_like(ex)
 hy_get = numpy.empty_like(hy)
 tempos_gpu = []
-for k in range(2,1001):    
+for k in range(1000,1001):    
     ex = numpy.zeros(k)
     hy = numpy.zeros(k)
     ex = ex.astype(numpy.float64)
@@ -71,13 +72,14 @@ for k in range(2,1001):
     kc = numpy.int32(k//2)
     t = time.time()
     for i in range(1,nsteps+1):
-        func_e(ex_gpu, hy_gpu,kc,t0,spread,numpy.int32(i), block=(32,32,1),grid=(1,1))
+        func_e(ex_gpu, hy_gpu,kc,t0,spread,numpy.int32(i), block=(256,1,1),grid=(2048,1))
         #cuda.memcpy_dtoh(ex_get, ex_gpu)
         #ex_get[kc] = math.exp(-0.5 * ((t0 - i) / spread) ** 2)
         #cuda.memcpy_htod(ex_gpu, ex_get)
-        func_h(ex_gpu, hy_gpu,kc,t0,spread,numpy.int32(i), block=(32,32,1),grid=(1,1))
+        func_h(ex_gpu, hy_gpu,kc,t0,spread,numpy.int32(i), block=(256,1,1),grid=(2048,1))
     tempos_gpu.append(time.time()-t)
 print('GPU',time.time()-t)
+ex_get = numpy.empty_like(ex)
 cuda.memcpy_dtoh(ex_get, ex_gpu)
 plt.plot(ex_get)
 

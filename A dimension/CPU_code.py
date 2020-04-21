@@ -9,9 +9,9 @@ hy = np.zeros(ke)
 kc = int(ke / 2)
 t0 = 40
 spread = 12
-nsteps = 1000
+nsteps = 2000
 tempos_cpu = []
-for i in range(2,1001):
+for i in range(1000,1001):
     
     ex = np.zeros(i)
     hy = np.zeros(i)
@@ -36,5 +36,5 @@ for i in range(2,1001):
 plt.ylim(-1,1)
     #plt.show()
 plt.plot(ex)
-#plt.show()
+plt.show()
 print("CPU",time.time()-t)
