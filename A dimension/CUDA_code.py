@@ -5,7 +5,9 @@ import numpy
 import math
 import matplotlib.pyplot as plt
 import time
-ke = 1000
+from tqdm import tqdm
+import keras
+ke = 100000
 ex = numpy.zeros(ke)
 hy = numpy.zeros(ke)
 ex = ex.astype(numpy.float64)
@@ -13,7 +15,7 @@ hy = hy.astype(numpy.float64)
 kc = ke//2
 t0 = 40
 spread = 12
-nsteps = 2000
+nsteps = 20000
 
 kc = numpy.int32(kc)
 t0 = numpy.int32(t0)
@@ -26,10 +28,6 @@ cuda.memcpy_htod(ex_gpu, ex)
 
 hy_gpu = cuda.mem_alloc(hy.nbytes)
 cuda.memcpy_htod(hy_gpu, hy)
-#a = numpy.random.randn(4,4)
-#a = a.astype(numpy.float32)
-#a_gpu = cuda.mem_alloc(a.nbytes)
-#cuda.memcpy_htod(a_gpu, a)
 
 mod = SourceModule("""
     #include <math.h>
@@ -60,7 +58,10 @@ func_h = mod.get_function("fdtd_h")
 ex_get = numpy.empty_like(ex)
 hy_get = numpy.empty_like(hy)
 tempos_gpu = []
-for k in range(1000,1001):    
+model = keras.models.load_model('pml-IA')
+	
+for k in tqdm(range(50,1001)):    
+    t = time.time()
     ex = numpy.zeros(k)
     hy = numpy.zeros(k)
     ex = ex.astype(numpy.float64)
@@ -70,15 +71,19 @@ for k in range(1000,1001):
     hy_gpu = cuda.mem_alloc(hy.nbytes)
     cuda.memcpy_htod(hy_gpu, hy)
     kc = numpy.int32(k//2)
-    t = time.time()
-    for i in range(1,nsteps+1):
-        func_e(ex_gpu, hy_gpu,kc,t0,spread,numpy.int32(i), block=(256,1,1),grid=(2048,1))
-        #cuda.memcpy_dtoh(ex_get, ex_gpu)
-        #ex_get[kc] = math.exp(-0.5 * ((t0 - i) / spread) ** 2)
-        #cuda.memcpy_htod(ex_gpu, ex_get)
-        func_h(ex_gpu, hy_gpu,kc,t0,spread,numpy.int32(i), block=(256,1,1),grid=(2048,1))
-    tempos_gpu.append(time.time()-t)
-print('GPU',time.time()-t)
+    
+    for i in range(1,k):
+		
+        func_e(ex_gpu, hy_gpu,kc,t0,spread,numpy.int32(i), block=(256,1,1),grid=(4096,1))
+        func_h(ex_gpu, hy_gpu,kc,t0,spread,numpy.int32(i), block=(256,1,1),grid=(4096,1))
+        ex = numpy.empty_like(ex)
+        cuda.memcpy_dtoh(ex, ex_gpu)
+        cuda.memcpy_htod(ex_gpu, ex)
+    t = time.time()-t
+    arq = open("tempos_cuda_pml",'a')
+    arq.writelines(str(k)+" "+str(t)+"\n")
+    arq.close()
+print('GPU',time.time()-t)	
 ex_get = numpy.empty_like(ex)
 cuda.memcpy_dtoh(ex_get, ex_gpu)
 plt.plot(ex_get)
